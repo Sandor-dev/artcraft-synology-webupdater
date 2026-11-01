@@ -169,6 +169,28 @@ else
   log "  Warning: could not download logo (will continue without it)"
 fi
 
+# Download official app icons
+download_app_icons() {
+  log "Downloading app icons..."
+  local icon_base="https://raw.githubusercontent.com/storytold"
+  for app in "${ALL_APPS[@]}"; do
+    local icon_url="${icon_base}/${app}/main/assets/app-icon/${app}-1024.png"
+    local dest="$PUBLIC_DIR/icons/${app}.png"
+    if curl -fsSL -o "$dest" "$icon_url" 2>/dev/null; then
+      log "  ${app}.png"
+    else
+      # Fallback: try hicolor 256
+      icon_url="${icon_base}/${app}/main/assets/app-icon/hicolor/256x256/apps/ai.storyteller.${app}.png"
+      if curl -fsSL -o "$dest" "$icon_url" 2>/dev/null; then
+        log "  ${app}.png (256)"
+      else
+        log "  Warning: no icon for $app"
+      fi
+    fi
+  done
+}
+download_app_icons
+
 # Create the nice index.html
 cat > "$PUBLIC_DIR/index.html" << 'INDEXEOF'
 <!DOCTYPE html>
