@@ -3,13 +3,13 @@
 # ArtCraft Web Apps Updater for Synology NAS / Linux
 # Downloads the latest *-web-*.zip from GitHub (storytold org) and replaces the content
 # of the corresponding folder under the ArtCraft public directory.
+# No backups are created — old files are overwritten.
 #
 # Usage:
 #   ./update-artcraft.sh                  # update all existing apps
 #   ./update-artcraft.sh pdfcraft         # update only one app
 #   ./update-artcraft.sh pdfcraft photocraft
 #   ./update-artcraft.sh --dry-run        # show what would be done
-#   ./update-artcraft.sh --no-backup      # skip backup
 #
 # Requirements: curl, and either unzip or python3/python
 
@@ -22,7 +22,6 @@ ORG="storytold"
 # ===============================================================
 
 DRY_RUN=0
-DO_BACKUP=1
 
 KNOWN_APPS=(
   photocraft
@@ -43,7 +42,6 @@ KNOWN_APPS=(
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 die() { log "ERROR: $*"; exit 1; }
 
-# Extract zip using unzip or Python fallback
 extract_zip() {
   local zip_file="$1"
   local dest="$2"
@@ -76,11 +74,10 @@ APPS_TO_UPDATE=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
-    --no-backup) DO_BACKUP=0; shift ;;
-    --backup) DO_BACKUP=1; shift ;;
     -h|--help)
-      echo "Usage: $0 [--dry-run] [--no-backup] [app1 app2 ...]"
+      echo "Usage: $0 [--dry-run] [app1 app2 ...]"
       echo "Default: update all existing apps found under $BASE_DIR"
+      echo "Note: No backups are created. Old files are overwritten."
       exit 0
       ;;
     -*)
@@ -156,13 +153,6 @@ update_app() {
   rm -rf "$tmp_dir"/*
   curl -fL --retry 3 -o "$zip_file" "$zip_url" || die "Download failed: $zip_url"
 
-  # Backup
-  if [[ $DO_BACKUP -eq 1 ]]; then
-    local backup="$BASE_DIR/${app}.backup.$(date +%Y%m%d-%H%M%S)"
-    log "  Backup: $backup"
-    cp -a "$target_dir" "$backup" || log "  Warning: backup failed partially."
-  fi
-
   # Clear old content (keep the folder itself)
   log "  Removing old files from $target_dir"
   find "$target_dir" -mindepth 1 -delete 2>/dev/null || rm -rf "$target_dir"/*
@@ -180,6 +170,9 @@ update_app() {
 
   log "  Inner folder: $(basename "$inner")"
   cp -a "$inner"/. "$target_dir/" || die "Copy failed"
+
+  # Fix permissions so nginx can read the new files
+  chmod -R a+rX "$target_dir" 2>/dev/null || true
 
   # Cleanup
   rm -rf "$tmp_dir"
