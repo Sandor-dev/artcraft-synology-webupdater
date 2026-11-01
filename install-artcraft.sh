@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 # ArtCraft Web Apps Installer for Synology NAS
-# Creates the folder structure, downloads the latest web builds of selected ArtCraft apps,
-# generates a docker-compose.yml (nginx), and optionally starts the stack.
+# Creates the folder structure, downloads the latest web builds of ArtCraft apps,
+# generates a nice index.html + docker-compose.yml (nginx), and optionally starts the stack.
 #
 # Usage:
 #   1. Edit the CONFIGURATION section below
@@ -10,7 +10,6 @@
 #   3. ./install-artcraft.sh
 #
 # Requirements: curl, and either unzip or python3/python
-# Docker Compose is optional (only needed if you want the script to start the stack)
 
 set -euo pipefail
 
@@ -28,12 +27,11 @@ HOST_PORT=4100
 NAS_IP=""
 
 # Which apps to install (space-separated)
-# Available: photocraft vectorcraft filmcraft lightcraft pdfcraft effectcraft
-#            designcraft figcraft wordcraft soundcraft deckcraft cadcraft gridcraft
-APPS_TO_INSTALL="photocraft pdfcraft lightcraft vectorcraft"
+# Set to "all" to install every known app
+APPS_TO_INSTALL="all"
 
 # Set to 1 if you want the script to run "docker compose up -d" at the end
-START_DOCKER=0
+START_DOCKER=1
 
 # Temporary download location
 TEMP_BASE="/tmp/artcraft-install"
@@ -41,6 +39,22 @@ TEMP_BASE="/tmp/artcraft-install"
 
 ORG="storytold"
 PUBLIC_DIR="$INSTALL_DIR/public"
+
+ALL_APPS=(
+  photocraft
+  vectorcraft
+  filmcraft
+  lightcraft
+  pdfcraft
+  effectcraft
+  designcraft
+  figcraft
+  wordcraft
+  soundcraft
+  deckcraft
+  cadcraft
+  gridcraft
+)
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 die() { log "ERROR: $*"; exit 1; }
@@ -89,7 +103,6 @@ detect_ip() {
     echo "$NAS_IP"
     return
   fi
-  # Best-effort local IP detection
   ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -1 || \
   hostname -I 2>/dev/null | awk '{print $1}' || \
   echo "YOUR_NAS_IP"
@@ -134,45 +147,221 @@ log "ArtCraft Installer starting..."
 log "Install directory: $INSTALL_DIR"
 log "Public directory:  $PUBLIC_DIR"
 log "Host port:         $HOST_PORT"
-log "Apps:              $APPS_TO_INSTALL"
+
+# Resolve apps list
+if [[ "$APPS_TO_INSTALL" == "all" ]]; then
+  APPS=("${ALL_APPS[@]}")
+else
+  read -ra APPS <<< "$APPS_TO_INSTALL"
+fi
+log "Apps to install: ${APPS[*]}"
 
 mkdir -p "$PUBLIC_DIR"
 mkdir -p "$TEMP_BASE"
+mkdir -p "$PUBLIC_DIR/icons"
 
-# Create a simple index.html that lists the apps
-cat > "$PUBLIC_DIR/index.html" << 'EOF'
+# Download project logo
+LOGO_URL="https://raw.githubusercontent.com/Sandor-dev/artcraft-synology-webupdater/main/project.png"
+log "Downloading project logo..."
+if curl -fsSL -o "$PUBLIC_DIR/icons/grok.png" "$LOGO_URL"; then
+  log "  Logo saved to $PUBLIC_DIR/icons/grok.png"
+else
+  log "  Warning: could not download logo (will continue without it)"
+fi
+
+# Create the nice index.html
+cat > "$PUBLIC_DIR/index.html" << 'INDEXEOF'
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ArtCraft Apps</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
-    h1 { color: #333; }
-    ul { list-style: none; padding: 0; }
-    li { margin: 0.5rem 0; }
-    a { display: inline-block; padding: 0.5rem 1rem; background: #0066cc; color: white; text-decoration: none; border-radius: 4px; }
-    a:hover { background: #0052a3; }
+    :root {
+      --bg: #0f1117;
+      --card: #1a1d26;
+      --card-hover: #222632;
+      --text: #f0f2f5;
+      --muted: #9aa0ab;
+      --accent: #5b9cff;
+      --border: #2a2f3c;
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 1140px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 2.8rem;
+    }
+    .logo {
+      display: block;
+      margin: 0 auto 18px auto;
+      max-width: 72px;
+      width: 72px;
+      height: 72px;
+      border-radius: 16px;
+    }
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 650;
+      margin: 0 0 0.35rem;
+      letter-spacing: -0.025em;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+      margin: 0;
+    }
+    .base-url {
+      margin-top: 1rem;
+      font-size: 0.88rem;
+      color: var(--muted);
+      word-break: break-all;
+    }
+    .base-url strong {
+      color: var(--text);
+      font-weight: 550;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1.1rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.15rem 1.25rem;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.18s, transform 0.18s, background 0.18s;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .card:hover {
+      border-color: var(--accent);
+      background: var(--card-hover);
+      transform: translateY(-3px);
+    }
+    .icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 12px;
+      flex-shrink: 0;
+      object-fit: cover;
+      background: #252a36;
+    }
+    .info h2 {
+      margin: 0 0 0.2rem;
+      font-size: 1.12rem;
+      font-weight: 600;
+    }
+    .info p {
+      margin: 0;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .info .path {
+      margin-top: 0.4rem;
+      font-size: 0.75rem;
+      color: var(--accent);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    footer {
+      margin-top: 3.2rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.6;
+    }
   </style>
 </head>
 <body>
-  <h1>ArtCraft Apps</h1>
-  <ul>
-EOF
+  <div class="container">
+    <header>
+      <img class="logo" src="icons/grok.png" alt="Grok">
+      <h1>ArtCraft Apps</h1>
+      <p class="subtitle">Free open-source creative tools, running locally</p>
+      <div class="base-url">Base URL: <strong id="base-url">detecting…</strong></div>
+    </header>
 
-for app in $APPS_TO_INSTALL; do
-  install_app "$app"
-  # Add link to index
-  echo "    <li><a href=\"$app/\">$app</a></li>" >> "$PUBLIC_DIR/index.html"
-done
+    <div class="grid" id="apps"></div>
 
-cat >> "$PUBLIC_DIR/index.html" << 'EOF'
-  </ul>
+    <footer>
+      Powered by ArtCraft web builds • Served from your NAS
+    </footer>
+  </div>
+  <script>
+    const apps = [
+      { folder: "photocraft",  name: "PhotoCraft",  desc: "Image editor (Photoshop alternative)", icon: "icons/photocraft.png" },
+      { folder: "vectorcraft", name: "VectorCraft", desc: "Vector illustration (Illustrator alternative)", icon: "icons/vectorcraft.png" },
+      { folder: "filmcraft",   name: "FilmCraft",   desc: "Video editor (Premiere alternative)", icon: "icons/filmcraft.png" },
+      { folder: "lightcraft",  name: "LightCraft",  desc: "Photo library & RAW (Lightroom alternative)", icon: "icons/lightcraft.png" },
+      { folder: "pdfcraft",    name: "PDFCraft",    desc: "PDF reader & editor (Acrobat alternative)", icon: "icons/pdfcraft.png" },
+      { folder: "effectcraft", name: "EffectCraft", desc: "Motion graphics (After Effects alternative)", icon: "icons/effectcraft.png" },
+      { folder: "designcraft", name: "DesignCraft", desc: "Page layout (InDesign alternative)", icon: "icons/designcraft.png" },
+      { folder: "figcraft",    name: "FigCraft",    desc: "Interface design (Figma alternative)", icon: "icons/figcraft.png" },
+      { folder: "wordcraft",   name: "WordCraft",   desc: "Word processor (Word alternative)", icon: "icons/wordcraft.png" },
+      { folder: "gridcraft",   name: "GridCraft",   desc: "Spreadsheet (Excel alternative)", icon: "icons/gridcraft.png" },
+      { folder: "deckcraft",   name: "DeckCraft",   desc: "Presentations (PowerPoint alternative)", icon: "icons/deckcraft.png" },
+      { folder: "cadcraft",    name: "CADCraft",    desc: "CAD & drafting (AutoCAD alternative)", icon: "icons/cadcraft.png" },
+      { folder: "soundcraft",  name: "SoundCraft",  desc: "Audio workstation (Pro Tools alternative)", icon: "icons/soundcraft.png" }
+    ];
+
+    const base = window.location.origin;
+    document.getElementById("base-url").textContent = base;
+
+    const grid = document.getElementById("apps");
+    apps.forEach(app => {
+      const url = `${base}/${app.folder}/`;
+      const card = document.createElement("a");
+      card.className = "card";
+      card.href = url;
+      card.target = "_blank";
+      card.rel = "noopener";
+      card.innerHTML = `
+        <img class="icon" src="${app.icon}" alt="${app.name} icon" loading="lazy">
+        <div class="info">
+          <h2>${app.name}</h2>
+          <p>${app.desc}</p>
+          <div class="path">/${app.folder}/</div>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  </script>
 </body>
 </html>
-EOF
+INDEXEOF
 
-log "Created index.html with links to installed apps."
+log "Created index.html"
+
+# Placeholder note about icons (user can add real app icons later)
+log "Note: Place app icons in $PUBLIC_DIR/icons/ (e.g. photocraft.png) for the cards to show images."
+log "A grok.png logo is expected at $PUBLIC_DIR/icons/grok.png (you can copy one there)."
+
+for app in "${APPS[@]}"; do
+  install_app "$app"
+done
+
+# Fix permissions so nginx (running as non-root) can read the files
+log "Fixing permissions for nginx..."
+chmod -R a+rX "$PUBLIC_DIR" 2>/dev/null || true
+# Also make sure directories are executable
+find "$PUBLIC_DIR" -type d -exec chmod a+x {} \; 2>/dev/null || true
 
 # Generate docker-compose.yml
 DETECTED_IP=$(detect_ip)
@@ -208,7 +397,7 @@ if [[ $START_DOCKER -eq 1 ]]; then
     (cd "$INSTALL_DIR" && docker compose up -d)
     log "Stack started. Check with: docker compose -f $COMPOSE_FILE ps"
   else
-    log "Docker Compose not found or not available. Start the stack manually:"
+    log "Docker Compose not found. Start the stack manually:"
     log "  cd $INSTALL_DIR && docker compose up -d"
   fi
 else
