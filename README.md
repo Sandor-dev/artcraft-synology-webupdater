@@ -8,14 +8,14 @@ These apps are static WebAssembly builds served by nginx. No paid zip files requ
 
 | Script | Purpose |
 |--------|---------|
-| `install-artcraft.sh` | One-time installer: creates folders, downloads selected apps, generates `docker-compose.yml` |
-| `update-artcraft.sh` | Updates existing apps to the latest web release |
+| `install-artcraft.sh` | One-time installer: creates folders, downloads all apps, downloads logo, generates `index.html` + `docker-compose.yml`, sets permissions, and optionally starts the stack |
+| `update-artcraft.sh` | Updates existing apps to the latest web release (no backups) |
 
 ## Requirements
 
 - `curl`
 - Either `unzip` **or** `python3` / `python` (the scripts fall back to Python automatically)
-- Docker + Docker Compose (only if you want the scripts to manage the nginx container)
+- Docker + Docker Compose (recommended; the installer can start the stack for you)
 
 On Synology you can get `unzip` via Entware (`opkg install unzip`) or just rely on the built-in Python.
 
@@ -34,8 +34,8 @@ chmod +x install-artcraft.sh
 Important settings in the script:
 - `INSTALL_DIR` — where to put the files (default: `/volume2/docker/artcraft`)
 - `HOST_PORT` — port to expose (default: `4100`)
-- `APPS_TO_INSTALL` — which apps to download
-- `START_DOCKER=1` — set to 1 if you want the script to start the container
+- `APPS_TO_INSTALL` — `"all"` (default) or a space-separated list
+- `START_DOCKER=1` — set to 1 (default) to automatically start the container
 
 After installation open `http://YOUR_NAS_IP:4100/` in a browser.
 
@@ -52,7 +52,7 @@ After installation open `http://YOUR_NAS_IP:4100/` in a browser.
 ./update-artcraft.sh --dry-run
 ```
 
-The updater creates a timestamped backup of each app folder before replacing the files.
+The updater overwrites old files (no backups are created).
 
 ## Docker Compose
 
