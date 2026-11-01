@@ -188,3 +188,25 @@ done
 log "Done."
 log "Open the apps in your browser and check Help → About to verify the new version."
 log "If something doesn't start, check the Docker container logs or the folder contents."
+
+# Ensure icons are present (re-download if missing)
+ensure_icons() {
+  local icons_dir="$BASE_DIR/icons"
+  mkdir -p "$icons_dir"
+  local logo_url="https://raw.githubusercontent.com/Sandor-dev/artcraft-synology-webupdater/main/project.png"
+  if [[ ! -f "$icons_dir/grok.png" ]]; then
+    log "Re-downloading project logo..."
+    curl -fsSL -o "$icons_dir/grok.png" "$logo_url" || true
+  fi
+  local icon_base="https://raw.githubusercontent.com/storytold"
+  for app in "${KNOWN_APPS[@]}"; do
+    local dest="$icons_dir/${app}.png"
+    if [[ ! -f "$dest" ]]; then
+      local icon_url="${icon_base}/${app}/main/assets/app-icon/${app}-1024.png"
+      curl -fsSL -o "$dest" "$icon_url" 2>/dev/null || \
+        curl -fsSL -o "$dest" "${icon_base}/${app}/main/assets/app-icon/hicolor/256x256/apps/ai.storyteller.${app}.png" 2>/dev/null || true
+    fi
+  done
+  chmod -R a+rX "$icons_dir" 2>/dev/null || true
+}
+ensure_icons
