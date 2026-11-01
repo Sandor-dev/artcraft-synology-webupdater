@@ -69,7 +69,7 @@ docker compose down
 
 - Only the **web** builds (`*-web-*.zip`) are downloaded.
 - The scripts work on any Linux system, not just Synology.
-- Inspired by the excellent guides on [mariushosting.com](https://mariushosting.com/), but fully automated and free.
+- Inspired by the excellent guides on [mariushosting.com](https://mariushosting.com/), but the installer and updater much more easy and automatic.
 
 ## License
 
